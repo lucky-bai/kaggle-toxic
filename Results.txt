@@ -1,0 +1,21 @@
+Summary of results
+
+These are cross-validation on 'toxic
+
+Using average word vectors from spacy
+Logistic: 0.9638
+XGBoost (depth=3, n=100): 0.9598
+XGBoost (depth=8, n=400): 0.9707
+XGBoost (depth=5, n=600): 0.9709
+
+Using bag of words (500 features)
+Bag of words + XGBoost: 0.9207
+Bag of words normalized + XGBoost: 0.9222
+
+Adding linguistic features
+Logistic + linguistic features: 0.9220 (makes it worse lol)
+XGBoost (depth 5, n 600) + linguistic features: 0.9737
+
+
+Fasttext:
+mostly worse than simple bag of words + xgboost
