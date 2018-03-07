@@ -4,6 +4,7 @@ import torch.optim as optim
 import numpy as np
 import pandas as pd
 from torch.autograd import Variable
+from collections import OrderedDict
 import spacy
 import pdb
 
@@ -17,7 +18,10 @@ WORDVEC_SIZE = 300
 # Number of label classes
 NUM_LABELS = 6
 
-BATCH_SIZE = 200
+BATCH_SIZE = 500
+NUM_EPOCHS = 3
+
+CATEGORIES = 'toxic severe_toxic obscene threat insult identity_hate'.split()
 
 
 
@@ -35,9 +39,6 @@ class DeepClassifier(nn.Module):
       batch_first = True,
     )
     self.multi_classifier = nn.Linear(HIDDEN_SIZE, NUM_LABELS)
-
-  def _sigmoid(self, x):
-    return 1 / (1 + np.exp(-x))
 
 
   def forward(self, text):
@@ -65,36 +66,58 @@ class DeepClassifier(nn.Module):
 
 
 
-def main():
-  #text = 'I eat cats for breakfast!'
-  #truth = Variable(torch.Tensor([1, 0, 0, 0, 0, 1])).cuda()
-
+def do_train():
   train_data = pd.read_csv('../train.csv')
 
   model = DeepClassifier().cuda()
-  optimizer = optim.Adam(model.parameters())
+  optimizer = optim.Adam(model.parameters(), lr = 0.0001)
   loss_fn = nn.MSELoss()
+  torch.save(model.state_dict(), 'model.t7')
 
-  # Just do one epoch through the data for now
-  batch_loss = 0
-  for ix, row in train_data.iterrows():
+  for epoch in range(NUM_EPOCHS):
+    batch_loss = 0
+    for ix, row in train_data.iterrows():
+      text = row['comment_text']
+      truth = Variable(torch.Tensor(row[2:8])).cuda()
+
+      if ix > 0 and ix % BATCH_SIZE == 0:
+        optimizer.zero_grad()
+
+      out = model(text)
+      loss = loss_fn(out, truth)
+      batch_loss += loss
+
+      if ix > 0 and ix % BATCH_SIZE == 0:
+        batch_loss.backward()
+        optimizer.step()
+        print(ix, float(batch_loss))
+        batch_loss = 0
+
+    torch.save(model.state_dict(), 'model_epoch_%d.t7' % epoch)
+
+
+def do_test():
+  test_data = pd.read_csv('../test.csv')
+
+  model = DeepClassifier().cuda()
+  model.load_state_dict(torch.load('model_epoch_2.t7'))
+
+  out = []
+  for ix, row in test_data.iterrows():
+    if ix % 100 == 0:
+      print(ix)
+
     text = row['comment_text']
-    truth = Variable(torch.Tensor(row[2:8])).cuda()
+    od = OrderedDict()
+    od['id'] = row['id']
+    model_out = model(text)
+    for ix, ct in enumerate(CATEGORIES):
+      od[ct] = float(model_out[0, ix])
+    out.append(od)
 
-    if ix % BATCH_SIZE == 0:
-      optimizer.zero_grad()
-
-    out = model(text)
-    loss = loss_fn(out, truth)
-    batch_loss += loss
-
-    if ix % BATCH_SIZE == 0:
-      batch_loss.backward()
-      optimizer.step()
-      print(ix, float(batch_loss))
-      batch_loss = 0
-
-  torch.save(model, 'model.t7')
+  pd.DataFrame(out).to_csv('submission.csv', index = False)
 
 
-main()
+
+#do_train()
+do_test()
